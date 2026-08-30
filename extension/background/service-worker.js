@@ -146,7 +146,7 @@ async function commitSubmissionToGitHub({ token, repo, branch = "main", baseDir 
   };
 }
 
-async function getOrCreateRepo(token, repoName = "Codeforces-Solutions") {
+async function getOrCreateRepo(token, rawRepoName = "Codeforces-Solutions") {
   const headers = {
     "Authorization": `Bearer ${token}`,
     "Accept": "application/vnd.github+json",
@@ -155,16 +155,20 @@ async function getOrCreateRepo(token, repoName = "Codeforces-Solutions") {
   };
 
   const userRes = await fetch(`${GITHUB_API_URL}/user`, { headers });
-  if (!userRes.ok) throw new Error("GitHub Authentication failed");
+  if (!userRes.ok) throw new Error("GitHub Authentication failed. Please check your Personal Access Token.");
   const user = await userRes.json();
   const owner = user.login;
 
+  // Clean repo name if owner was included
+  const repoName = rawRepoName.includes("/") ? rawRepoName.split("/").pop().trim() : rawRepoName.trim();
+
+  // 1. Check if repo already exists
   const repoRes = await fetch(`${GITHUB_API_URL}/repos/${owner}/${repoName}`, { headers });
   if (repoRes.ok) {
     return { owner, repoName, fullName: `${owner}/${repoName}` };
   }
 
-  // Create repository
+  // 2. Try to create repository
   const createRes = await fetch(`${GITHUB_API_URL}/user/repos`, {
     method: "POST",
     headers,
@@ -176,12 +180,12 @@ async function getOrCreateRepo(token, repoName = "Codeforces-Solutions") {
     })
   });
 
-  if (!createRes.ok) {
-    const err = await createRes.json().catch(() => ({}));
-    throw new Error(err.message || "Failed to create GitHub repository");
+  if (createRes.ok || createRes.status === 422) {
+    return { owner, repoName, fullName: `${owner}/${repoName}` };
   }
 
-  return { owner, repoName, fullName: `${owner}/${repoName}` };
+  const err = await createRes.json().catch(() => ({}));
+  throw new Error(err.message || "Failed to create GitHub repository");
 }
 
 // Full Sync from Day 1 (Accepted Solutions Only)

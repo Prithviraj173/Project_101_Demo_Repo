@@ -1,4 +1,4 @@
-﻿// Content Script for Codeforces pages
+// Content Script for Codeforces pages
 (function() {
   console.log("[CF-GitHub-Sync] Content script active on Codeforces.");
 
@@ -7,72 +7,84 @@
     const tableHeader = document.querySelector(".datatable, .status-frame-datatable");
     if (!tableHeader || document.querySelector("#cf-table-sync-bar")) return;
 
-    // Detect user handle from page title or header
-    let handle = "User";
-    const titleMatch = document.title.match(/([a-zA-Z0-9_\-]+)\s+submissions/i) || document.body.innerText.match(/([a-zA-Z0-9_\-]+)\s+submissions/i);
-    if (titleMatch) {
-      handle = titleMatch[1];
-    } else {
-      const userLink = document.querySelector("a[href*='/profile/']");
-      if (userLink) handle = userLink.innerText.trim();
-    }
+    // Detect user handle robustly (from storage, URL, or page DOM)
+    chrome.storage.local.get(["cfHandle", "ghToken", "ghRepo", "organizeMode"]).then(storage => {
+      let handle = storage.cfHandle || "";
 
-    const bar = document.createElement("div");
-    bar.id = "cf-table-sync-bar";
-    bar.className = "cf-sync-table-bar";
-    bar.innerHTML = `
-      <div class="cf-table-bar-inner">
-        <div class="cf-bar-title">
-          <span class="cf-logo-badge">⚡ CF Sync</span>
-          <span>Sync all accepted solutions for <strong>${handle}</strong> into your GitHub repository</span>
-        </div>
-        <button id="cf-quick-sync-all-btn" class="cf-sync-button">
-          <span>🚀 Sync All Accepted (Day 1 Onwards)</span>
-        </button>
-      </div>
-      <div id="cf-table-sync-status" class="cf-table-sync-status hidden"></div>
-    `;
-
-    tableHeader.parentNode.insertBefore(bar, tableHeader);
-
-    document.getElementById("cf-quick-sync-all-btn").addEventListener("click", async () => {
-      const btn = document.getElementById("cf-quick-sync-all-btn");
-      const statusDiv = document.getElementById("cf-table-sync-status");
-
-      btn.disabled = true;
-      btn.innerText = "⏳ Auto-Creating Repo & Syncing...";
-      statusDiv.className = "cf-table-sync-status info";
-      statusDiv.innerHTML = "Connecting to GitHub & fetching all Accepted solutions from Day 1...";
-      statusDiv.classList.remove("hidden");
-
-      const storage = await chrome.storage.local.get(["ghToken", "ghRepo", "organizeMode"]);
-      if (!storage.ghToken) {
-        statusDiv.className = "cf-table-sync-status error";
-        statusDiv.innerHTML = `⚠️ Please click the <strong>⚡ extension icon</strong> in your Chrome toolbar to enter your GitHub token first!`;
-        btn.disabled = false;
-        btn.innerText = "🚀 Sync All Accepted (Day 1 Onwards)";
-        return;
+      if (!handle || handle.toLowerCase() === "personal" || handle.toLowerCase() === "user") {
+        const pathParts = window.location.pathname.split("/").filter(Boolean);
+        if (pathParts[0] === "submissions" && pathParts[1]) {
+          handle = pathParts[1];
+        }
       }
 
-      chrome.runtime.sendMessage({
-        action: "SYNC_ALL_FROM_DAY_ONE",
-        payload: {
-          token: storage.ghToken,
-          handle: handle,
-          repoName: storage.ghRepo || "Codeforces-Solutions",
-          organizeMode: storage.organizeMode || "ALL"
-        }
-      }, (res) => {
-        btn.disabled = false;
-        btn.innerText = "🚀 Sync All Accepted (Day 1 Onwards)";
+      if (!handle || handle.toLowerCase() === "personal" || handle.toLowerCase() === "user") {
+        const profileEl = document.querySelector("#sidebar a[href*='/profile/']") || document.querySelector("a[href*='/profile/']");
+        if (profileEl) handle = profileEl.innerText.trim();
+      }
 
-        if (res && res.success) {
-          statusDiv.className = "cf-table-sync-status success";
-          statusDiv.innerHTML = `✅ <strong>Done!</strong> Successfully synced ${res.count} Accepted problems into GitHub repository.<br/><a href="${res.repoUrl}" target="_blank" style="color:#059669; font-weight:bold; text-decoration:underline;">View Your Repository on GitHub ↗</a>`;
-        } else {
+      handle = handle || "Sinister007";
+
+      const bar = document.createElement("div");
+      bar.id = "cf-table-sync-bar";
+      bar.className = "cf-sync-table-bar";
+      bar.innerHTML = `
+        <div class="cf-table-bar-inner">
+          <div class="cf-bar-title">
+            <span class="cf-logo-badge">⚡ CF Sync</span>
+            <span>Sync all accepted solutions for <strong>@${handle}</strong> into your GitHub repository</span>
+          </div>
+          <button id="cf-quick-sync-all-btn" class="cf-sync-button">
+            <span>🚀 Sync All Accepted (Day 1 Onwards)</span>
+          </button>
+        </div>
+        <div id="cf-table-sync-status" class="cf-table-sync-status hidden"></div>
+      `;
+
+      tableHeader.parentNode.insertBefore(bar, tableHeader);
+
+      document.getElementById("cf-quick-sync-all-btn").addEventListener("click", async () => {
+        const btn = document.getElementById("cf-quick-sync-all-btn");
+        const statusDiv = document.getElementById("cf-table-sync-status");
+
+        btn.disabled = true;
+        btn.innerText = "⏳ Syncing into GitHub...";
+        statusDiv.className = "cf-table-sync-status info";
+        statusDiv.innerHTML = "Fetching all Accepted solutions from Day 1 and committing...";
+        statusDiv.classList.remove("hidden");
+
+        const curStorage = await chrome.storage.local.get(["cfHandle", "ghToken", "ghRepo", "organizeMode"]);
+        if (!curStorage.ghToken) {
           statusDiv.className = "cf-table-sync-status error";
-          statusDiv.innerHTML = `❌ Sync error: ${res ? res.error : 'Unknown error'}`;
+          statusDiv.innerHTML = `⚠️ Please click the <strong>⚡ extension icon</strong> in your Chrome toolbar to enter your GitHub token first!`;
+          btn.disabled = false;
+          btn.innerText = "🚀 Sync All Accepted (Day 1 Onwards)";
+          return;
         }
+
+        const effectiveHandle = curStorage.cfHandle || handle;
+        const targetRepo = curStorage.ghRepo || "CF-Submissions-all-time";
+
+        chrome.runtime.sendMessage({
+          action: "SYNC_ALL_FROM_DAY_ONE",
+          payload: {
+            token: curStorage.ghToken,
+            handle: effectiveHandle,
+            repoName: targetRepo,
+            organizeMode: curStorage.organizeMode || "ALL"
+          }
+        }, (res) => {
+          btn.disabled = false;
+          btn.innerText = "🚀 Sync All Accepted (Day 1 Onwards)";
+
+          if (res && res.success) {
+            statusDiv.className = "cf-table-sync-status success";
+            statusDiv.innerHTML = `✅ <strong>Success!</strong> Pushed ${res.count} Accepted problems into GitHub repository.<br/><a href="${res.repoUrl}" target="_blank" style="color:#059669; font-weight:bold; text-decoration:underline;">View Your Repository on GitHub ↗</a>`;
+          } else {
+            statusDiv.className = "cf-table-sync-status error";
+            statusDiv.innerHTML = `❌ Sync error: ${res ? res.error : 'Unknown error'}`;
+          }
+        });
       });
     });
   }

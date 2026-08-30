@@ -245,7 +245,7 @@ async function syncAllAcceptedFromDayOne({ token, handle, repoName = "Codeforces
     const solFilename = `solution.${ext}`;
 
     const r = prob.rating || 0;
-    const ratingKey = r > 0 ? `${r:04d}` : "unrated";
+    const ratingKey = r > 0 ? String(r).padStart(4, "0") : "unrated";
     ratingMap[ratingKey] = (ratingMap[ratingKey] || 0) + 1;
 
     const tags = prob.tags && prob.tags.length ? prob.tags : ["general"];

@@ -1,4 +1,4 @@
-﻿document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", () => {
   // Elements
   const themeToggleBtn = document.getElementById("themeToggleBtn");
   const cfHandleInput = document.getElementById("cfHandle");
@@ -52,9 +52,13 @@
   const tableSearch = document.getElementById("tableSearch");
   const tableCountBadge = document.getElementById("tableCountBadge");
   const tableBody = document.getElementById("submissionsTableBody");
+  const tableSortSelect = document.getElementById("tableSortSelect");
+  const loadAllDayOneBtn = document.getElementById("loadAllDayOneBtn");
+  const dayOneBadge = document.getElementById("dayOneBadge");
 
   let loadedSubmissions = [];
   let userRepos = [];
+  let currentSortOrder = "asc"; // Default: Day 1 first
 
   // Theme Toggle
   themeToggleBtn.addEventListener("click", () => {
@@ -106,8 +110,8 @@
       cfAvatar.src = data.avatar || "https://userpic.codeforces.org/no-avatar.jpg";
       cfProfileBanner.classList.remove("hidden");
 
-      // Auto preview
-      loadPreview(handle);
+      // Auto preview from Day 1
+      loadPreview(handle, null, "asc");
     } catch (err) {
       alert("Error verifying handle: " + err.message);
     } finally {
@@ -196,15 +200,28 @@
   });
 
   // Load Submissions Preview
-  async function loadPreview(handle) {
+  async function loadPreview(handle, customLimit = null, sortOrder = null) {
     const h = handle || cfHandleInput.value.trim();
-    if (!h) return;
+    if (!h) {
+      alert("Please enter a Codeforces handle first");
+      return;
+    }
 
     const isOwn = document.querySelector('input[name="flowMode"]:checked').value === "own";
-    const limit = filterLimit.value ? parseInt(filterLimit.value) : 50;
+    const sort = sortOrder || tableSortSelect.value || currentSortOrder;
+    let limitQuery = "";
+
+    if (customLimit !== null) {
+      limitQuery = customLimit ? `&limit=${customLimit}` : "&limit=0";
+    } else if (filterLimit.value) {
+      limitQuery = `&limit=${parseInt(filterLimit.value)}`;
+    }
+
+    previewBtn.disabled = true;
+    previewBtn.innerText = "Loading...";
 
     try {
-      const resp = await fetch(`/api/codeforces/submissions?handle=${encodeURIComponent(h)}&limit=${limit}&is_own_account=${isOwn}`);
+      const resp = await fetch(`/api/codeforces/submissions?handle=${encodeURIComponent(h)}${limitQuery}&is_own_account=${isOwn}&sort=${sort}`);
       const data = await resp.json();
       if (data.success && data.submissions) {
         loadedSubmissions = data.submissions;
@@ -212,6 +229,9 @@
       }
     } catch (err) {
       console.error("Preview load error", err);
+    } finally {
+      previewBtn.disabled = false;
+      previewBtn.innerText = "Preview Submissions";
     }
   }
 
@@ -219,37 +239,69 @@
     loadPreview();
   });
 
+  // Fetch All Submissions from Day 1
+  loadAllDayOneBtn.addEventListener("click", () => {
+    loadAllDayOneBtn.disabled = true;
+    loadAllDayOneBtn.innerText = "Fetching All...";
+    loadPreview(null, 0, "asc").finally(() => {
+      loadAllDayOneBtn.disabled = false;
+      loadAllDayOneBtn.innerText = "📥 All from Day 1";
+    });
+  });
+
+  // Table Sort Order Change
+  tableSortSelect.addEventListener("change", () => {
+    currentSortOrder = tableSortSelect.value;
+    if (loadedSubmissions && loadedSubmissions.length > 0) {
+      if (currentSortOrder === "asc") {
+        loadedSubmissions.sort((a, b) => (a.creationTimeSeconds || 0) - (b.creationTimeSeconds || 0));
+        dayOneBadge.innerText = "From Day 1";
+      } else {
+        loadedSubmissions.sort((a, b) => (b.creationTimeSeconds || 0) - (a.creationTimeSeconds || 0));
+        dayOneBadge.innerText = "Latest First";
+      }
+      renderSubmissionsTable(loadedSubmissions);
+    } else {
+      loadPreview(null, null, currentSortOrder);
+    }
+  });
+
   // Render Submissions Table
   function renderSubmissionsTable(items) {
     if (!items || items.length === 0) {
-      tableBody.innerHTML = `<tr><td colspan="7" class="empty-state">No submissions found matching criteria.</td></tr>`;
+      tableBody.innerHTML = `<tr><td colspan="8" class="empty-state">No submissions found matching criteria.</td></tr>`;
       tableCountBadge.innerText = "0 items";
       return;
     }
 
     tableCountBadge.innerText = `${items.length} items`;
-    tableBody.innerHTML = items.map(sub => {
+    tableBody.innerHTML = items.map((sub, index) => {
       const prob = sub.problem || {};
       const verdict = sub.verdict || "PENDING";
       const isOk = verdict === "OK";
       const verdictBadgeClass = isOk ? "badge-success" : (verdict.includes("WRONG") ? "badge-danger" : "badge-warning");
       const statusBadge = sub.status ? `<span class="badge ${getStatusClass(sub.status)}">${sub.status}</span>` : `<span class="badge">READY</span>`;
       const sourceBadge = sub.sourceAvailable ? `<span class="badge badge-success">Available</span>` : `<span class="badge badge-warning">Metadata</span>`;
-      const pathDisplay = sub.targetPath || `codeforces/${sub.contestId || 'set'}/${prob.index || 'A'}/`;
+      
+      const subTime = sub.creationTimeSeconds ? new Date(sub.creationTimeSeconds * 1000) : (sub.createdAtUtc ? new Date(sub.createdAtUtc) : null);
+      const dateDisplay = subTime ? `${subTime.toISOString().slice(0, 10)} ${subTime.toISOString().slice(11, 16)}` : 'N/A';
+      const dayNum = currentSortOrder === "asc" ? `#${index + 1}` : `#${items.length - index}`;
 
       return `
         <tr>
+          <td><span class="badge ${index === 0 && currentSortOrder === 'asc' ? 'badge-info' : ''}">${dayNum}</span></td>
           <td><a href="${sub.submissionUrl || '#'}" target="_blank" class="problem-link">#${sub.id || sub.submissionId}</a></td>
+          <td><span class="path-code" title="${subTime ? subTime.toUTCString() : ''}">${dateDisplay}</span></td>
           <td>
             <a href="${sub.problemUrl || '#'}" target="_blank" class="problem-link">
               <strong>${prob.index || sub.problemIndex || ''}</strong>. ${prob.name || sub.problemName || 'Problem'}
             </a>
+            ${sub.contestName || sub.contestId ? `<small class="helper-text">${sub.contestName || ('Contest ' + sub.contestId)}</small>` : ''}
           </td>
           <td><span class="badge ${verdictBadgeClass}">${verdict}</span></td>
           <td>${sub.programmingLanguage || sub.language || 'Code'}</td>
           <td>${sourceBadge}</td>
           <td>${statusBadge}</td>
-          <td><code class="path-code">${pathDisplay}</code></td>
         </tr>
       `;
     }).join("");

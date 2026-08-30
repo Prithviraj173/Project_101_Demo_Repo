@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -255,8 +255,17 @@
         <!-- Submissions Table Card -->
         <section class="card">
           <div class="card-header table-header">
-            <h2>Submissions</h2>
+            <div>
+              <h2>Submissions <span class="badge badge-info" id="dayOneBadge">From Day 1</span></h2>
+            </div>
             <div class="table-actions">
+              <select id="tableSortSelect" class="table-sort-select" title="Change submission sort order">
+                <option value="asc" selected>🌱 Day 1 (Oldest First)</option>
+                <option value="desc">⚡ Latest (Newest First)</option>
+              </select>
+              <button id="loadAllDayOneBtn" class="btn btn-secondary btn-sm" title="Fetch complete submission history from Day 1">
+                📥 All from Day 1
+              </button>
               <input type="text" id="tableSearch" placeholder="Search problems..." class="table-search-input" />
               <span id="tableCountBadge" class="badge">0 items</span>
             </div>
@@ -266,18 +275,19 @@
               <table class="data-table">
                 <thead>
                   <tr>
-                    <th>ID</th>
+                    <th>#</th>
+                    <th>Submission ID</th>
+                    <th>Date (UTC)</th>
                     <th>Contest / Problem</th>
                     <th>Verdict</th>
                     <th>Language</th>
                     <th>Source</th>
                     <th>Status</th>
-                    <th>Path</th>
                   </tr>
                 </thead>
                 <tbody id="submissionsTableBody">
                   <tr>
-                    <td colspan="7" class="empty-state">No submissions loaded yet. Click <strong>Verify</strong> or <strong>Preview</strong>.</td>
+                    <td colspan="8" class="empty-state">No submissions loaded yet. Click <strong>Verify</strong> or <strong>Preview</strong>.</td>
                   </tr>
                 </tbody>
               </table>

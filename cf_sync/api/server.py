@@ -1,4 +1,4 @@
-﻿"""
+"""
 REST API and Web Server for Codeforces to GitHub Sync.
 Provides endpoints for frontend, CLI, and extension integrations.
 """
@@ -86,16 +86,26 @@ class SyncAPIHandler(SimpleHTTPRequestHandler):
                 self._send_error_json(400, "Query parameter 'handle' is required")
                 return
 
-            limit = int(query.get("limit", [50])[0])
+            limit_val = query.get("limit", ["50"])[0].strip()
+            limit = int(limit_val) if limit_val.isdigit() and int(limit_val) > 0 else None
             is_own = query.get("is_own_account", ["false"])[0].lower() == "true"
+            sort_order = query.get("sort", ["asc"])[0].lower()
 
             try:
                 cf = CodeforcesClient()
                 submissions = cf.fetch_all_submissions(handle=handle, max_submissions=limit, is_own_account=is_own)
+                
+                # Sort submissions: 'asc' for Day 1 (oldest) first, 'desc' for newest first
+                if sort_order == "asc":
+                    submissions.sort(key=lambda s: s.creation_time_seconds)
+                else:
+                    submissions.sort(key=lambda s: s.creation_time_seconds, reverse=True)
+
                 self._send_json(200, {
                     "success": True,
                     "handle": handle,
                     "count": len(submissions),
+                    "sort": sort_order,
                     "submissions": [s.to_dict() for s in submissions]
                 })
             except Exception as e:

@@ -1,4 +1,4 @@
-﻿"""
+"""
 Domain models and dataclasses for Codeforces to GitHub sync.
 """
 from dataclasses import dataclass, field
@@ -21,6 +21,13 @@ class VerdictMode(str, Enum):
     ACCEPTED_ONLY = "ACCEPTED_ONLY"
     REJECTED_ONLY = "REJECTED_ONLY"
     CUSTOM = "CUSTOM"
+
+
+class OrganizeMode(str, Enum):
+    ALL = "ALL"              # Creates by-contest, by-rating, by-tag + complete index
+    CONTEST = "CONTEST"      # codeforces/by-contest/<contest-id>/<problem>/
+    RATING = "RATING"        # codeforces/by-rating/<rating>/<problem>/
+    TAG = "TAG"              # codeforces/by-tag/<tag>/<problem>/
 
 
 @dataclass
@@ -218,6 +225,7 @@ class SyncConfig:
     repo_name: str
     branch: str = "main"
     destination_dir: str = "codeforces"
+    organize_mode: OrganizeMode = OrganizeMode.ALL
     commit_message: Optional[str] = None
     create_pr: bool = False
     pr_branch: Optional[str] = None

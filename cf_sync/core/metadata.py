@@ -1,4 +1,4 @@
-﻿"""
+"""
 Structured metadata generation for synchronized Codeforces submissions.
 """
 import json
@@ -96,3 +96,80 @@ class MetadataGenerator:
                 f"{prefix} For full submission details, visit: {submission.submission_url}\n"
             )
             return f"{header}\n{unavailable_notice}\n"
+
+    def generate_repository_index_markdown(
+        self,
+        submissions: list,
+        handle: Optional[str] = None,
+        base_dir: str = "codeforces"
+    ) -> str:
+        """
+        Generates comprehensive repository README.md with:
+        - Breakdown & solution links sorted by Difficulty / Rating (800, 1000, ..., 2000+)
+        - Breakdown & solution links categorized by Problem Tags (DP, Greedy, Math, Trees, etc.)
+        - Solved timeline from Day 1!
+        """
+        handle_display = handle or "Codeforces User"
+        total_subs = len(submissions)
+
+        # Rating buckets
+        rating_map = {}
+        # Tag buckets
+        tag_map = {}
+
+        for sub in sorted(submissions, key=lambda s: s.creation_time_seconds):
+            r = sub.problem.rating or 0
+            rating_key = f"{r:04d}" if r > 0 else "Unrated"
+            rating_map.setdefault(rating_key, []).append(sub)
+
+            tags = sub.problem.tags or ["general"]
+            for t in tags:
+                tag_map.setdefault(t, []).append(sub)
+
+        lines = [
+            f"# Codeforces Solutions Repository — @{handle_display}",
+            "",
+            f"> Automated, categorized archive of **{total_subs}** Codeforces submissions with ratings, topic tags, and metadata.",
+            "",
+            "## 📊 Solutions by Rating / Difficulty",
+            "",
+            "| Rating | Solved Count | Quick Folder Link |",
+            "| :---: | :---: | :--- |",
+        ]
+
+        for r_key in sorted(rating_map.keys()):
+            count = len(rating_map[r_key])
+            folder_link = f"[`{r_key}`](./by-rating/{r_key}/)" if r_key != "Unrated" else "[`unrated`](./by-rating/unrated/)"
+            display_name = f"⭐ {int(r_key)}" if r_key.isdigit() and int(r_key) > 0 else "Unrated"
+            lines.append(f"| **{display_name}** | {count} | {folder_link} |")
+
+        lines.extend([
+            "",
+            "## 🏷️ Solutions by Topic / Tags",
+            "",
+            "| Topic / Tag | Solved Count | Folder Link |",
+            "| :--- | :---: | :--- |",
+        ])
+
+        for t_key in sorted(tag_map.keys(), key=lambda t: (-len(tag_map[t]), t)):
+            count = len(tag_map[t_key])
+            t_clean = t_key.replace(" ", "-")
+            folder_link = f"[`{t_key}`](./by-tag/{t_clean}/)"
+            lines.append(f"| `{t_key}` | {count} | {folder_link} |")
+
+        lines.extend([
+            "",
+            "## 📁 Repository Structure",
+            "```",
+            f"{base_dir}/",
+            "├── by-contest/      # Solutions organized by contest ID & round name",
+            "├── by-rating/       # Solutions organized by difficulty rating (0800, 1200, 1600...)",
+            "├── by-tag/          # Solutions categorized by topic tags (dp, greedy, math...)",
+            "└── .cf_sync_index.json",
+            "```",
+            "",
+            "---",
+            "*Auto-generated with Codeforces to GitHub Sync Engine.*",
+        ])
+
+        return "\n".join(lines)

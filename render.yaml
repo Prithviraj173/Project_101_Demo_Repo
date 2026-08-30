@@ -1,0 +1,9 @@
+﻿services:
+  - type: web
+    name: codeforces-github-sync
+    env: python
+    buildCommand: ""
+    startCommand: "python -m cf_sync.api.server --host 0.0.0.0 --port $PORT"
+    envVars:
+      - key: PORT
+        value: 10000

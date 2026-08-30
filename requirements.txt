@@ -1,0 +1,4 @@
+﻿# Standard Library only - zero required external dependencies!
+# Optional packages for high-concurrency production ASGI servers:
+# uvicorn>=0.20.0
+# fastapi>=0.95.0

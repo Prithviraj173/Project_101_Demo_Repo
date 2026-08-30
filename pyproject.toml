@@ -1,0 +1,21 @@
+﻿[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "codeforces-github-sync"
+version = "1.0.0"
+authors = [
+  { name="Prithviraj Adhikary", email="prithvirajadhikary@gmail.com" },
+]
+description = "Codeforces Submissions to GitHub Synchronization Engine"
+readme = "README.md"
+requires-python = ">=3.9"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
+
+[project.scripts]
+cf-sync = "cf_sync.cli:main"
+cf-server = "cf_sync.api.server:run_server"

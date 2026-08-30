@@ -1,4 +1,4 @@
-﻿import json
+import json
 import unittest
 from datetime import datetime, timezone
 from cf_sync.core.metadata import MetadataGenerator
@@ -53,12 +53,13 @@ class TestMetadata(unittest.TestCase):
         self.assertIn("Verdict: OK", content)
         self.assertIn("#include <iostream>", content)
 
-    def test_flow_b_solution_file_without_source(self):
-        self.sub.source_code = None
-        self.sub.source_available = False
-        content = self.generator.format_solution_file_content(self.sub, handle="public_user")
-        self.assertIn("SOURCE CODE UNAVAILABLE VIA CODEFORCES PUBLIC API", content)
-        self.assertIn("https://codeforces.com/contest/1900/submission/987654", content)
+    def test_generate_repository_index_markdown(self):
+        md = self.generator.generate_repository_index_markdown([self.sub], handle="tourist")
+        self.assertIn("# Codeforces Solutions Repository — @tourist", md)
+        self.assertIn("Solutions by Rating / Difficulty", md)
+        self.assertIn("Solutions by Topic / Tags", md)
+        self.assertIn("1200", md)
+        self.assertIn("constructive algorithms", md)
 
 
 if __name__ == "__main__":

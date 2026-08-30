@@ -1,0 +1,36 @@
+﻿{
+  "manifest_version": 3,
+  "name": "Codeforces to GitHub Sync",
+  "version": "1.0.0",
+  "description": "Synchronize Codeforces submissions directly into your GitHub repository sorted by contest, rating, and topic tags.",
+  "permissions": [
+    "storage",
+    "activeTab",
+    "scripting"
+  ],
+  "host_permissions": [
+    "*://codeforces.com/*",
+    "*://api.github.com/*"
+  ],
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "Codeforces to GitHub Sync"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "*://codeforces.com/*"
+      ],
+      "js": [
+        "content/content.js"
+      ],
+      "css": [
+        "content/content.css"
+      ],
+      "run_at": "document_end"
+    }
+  ],
+  "background": {
+    "service_worker": "background/service-worker.js"
+  }
+}

@@ -417,8 +417,9 @@ def run_server(host: str = "0.0.0.0", port: int = 8080):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Codeforces to GitHub Sync API Server")
-    parser.add_argument("--host", default="127.0.0.1", help="Host address")
-    parser.add_argument("--port", type=int, default=8080, help="Port number")
+    default_port = int(os.environ.get("PORT", 8080))
+    parser.add_argument("--host", default=os.environ.get("HOST", "0.0.0.0"), help="Host address")
+    parser.add_argument("--port", type=int, default=default_port, help="Port number")
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")

@@ -1,4 +1,4 @@
-﻿"""
+"""
 Synchronization Orchestrator coordinating Codeforces API retrieval, filtering,
 path generation, metadata formatting, and GitHub repository committing.
 """
@@ -141,13 +141,11 @@ class SyncService:
         path_builder = PathBuilder(base_dir=config.destination_dir)
         files_to_commit: Dict[str, str] = {}
         newly_synced_ids: Set[int] = set()
+        organize_mode = config.organize_mode.value if hasattr(config.organize_mode, "value") else str(config.organize_mode)
 
         for idx, sub in enumerate(eligible_submissions, start=1):
-            paths = path_builder.build_paths(sub)
-            folder_path = paths["folder_path"]
-            sol_path = paths["solution_path"]
-            meta_path = paths["metadata_path"]
-
+            primary_paths = path_builder.build_paths(sub)
+            sol_path = primary_paths["solution_path"]
             sub.target_path = sol_path
 
             # Generate contents
@@ -155,8 +153,11 @@ class SyncService:
                 meta_content = self.metadata_generator.generate_metadata_json(sub, handle=config.handle)
                 sol_content = self.metadata_generator.format_solution_file_content(sub, handle=config.handle)
 
-                files_to_commit[meta_path] = meta_content
-                files_to_commit[sol_path] = sol_content
+                # Generate files across requested layouts (by-contest, by-rating, by-tag)
+                layout_destinations = path_builder.build_layout_file_destinations(sub, organize_mode=organize_mode)
+                for s_path, m_path in layout_destinations:
+                    files_to_commit[s_path] = sol_content
+                    files_to_commit[m_path] = meta_content
 
                 newly_synced_ids.add(sub.id)
 
@@ -203,7 +204,15 @@ class SyncService:
                     )
                 )
 
-        # 7. Update .cf_sync_index.json
+        # 7. Generate Rich Repository Index README.md (with Rating and Tag sections!)
+        repo_index_md = self.metadata_generator.generate_repository_index_markdown(
+            eligible_submissions,
+            handle=config.handle,
+            base_dir=config.destination_dir
+        )
+        files_to_commit[f"{config.destination_dir}/README.md"] = repo_index_md
+
+        # 8. Update .cf_sync_index.json
         all_synced_ids_list = sorted(list(synced_ids.union(newly_synced_ids)))
         index_payload = {
             "version": "1.0",

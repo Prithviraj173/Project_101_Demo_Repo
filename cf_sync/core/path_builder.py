@@ -1,4 +1,4 @@
-﻿"""
+"""
 Path and filename builder with strict sanitization, path traversal prevention,
 and Windows/POSIX compatibility.
 """
@@ -93,9 +93,19 @@ class PathBuilder:
         ext = self.language_mapper.get_extension(language)
         return f"solution.{ext}"
 
+    def get_rating_folder(self, rating: Optional[int]) -> str:
+        """Generates zero-padded 4-digit folder name for rating, e.g. '0800', '1200', '2100' or 'unrated'"""
+        if rating is not None and rating > 0:
+            return f"{rating:04d}"
+        return "unrated"
+
+    def get_tag_folder(self, tag: str) -> str:
+        """Generates clean folder name for tag topic, e.g. 'dp', 'math', 'greedy'"""
+        return sanitize_path_segment(tag, default="general")
+
     def build_paths(self, submission: Submission) -> dict:
         """
-        Returns a dictionary containing:
+        Returns primary path dictionary containing:
         - folder_path: Directory path in repo
         - solution_path: Full relative POSIX path for solution file
         - metadata_path: Full relative POSIX path for metadata.json
@@ -113,3 +123,37 @@ class PathBuilder:
             "solution_path": solution_path,
             "metadata_path": metadata_path,
         }
+
+    def build_layout_file_destinations(self, submission: Submission, organize_mode: str = "ALL") -> list:
+        """
+        Returns list of (solution_path, metadata_path) pairs for the chosen organize mode.
+        - CONTEST: codeforces/by-contest/<contest-id>-<contest-name>/<problem-index>-<name>/...
+        - RATING:  codeforces/by-rating/<rating>/<problem-index>-<name>/...
+        - TAG:     codeforces/by-tag/<tag>/<problem-index>-<name>/...
+        - ALL:     Creates by-contest, by-rating, and by-tag entries!
+        """
+        problem_folder = self.get_problem_folder(submission.problem.index, submission.problem.name)
+        solution_filename = self.get_solution_filename(submission.programming_language)
+        results = []
+
+        # 1. By-contest layout
+        if organize_mode in ("ALL", "CONTEST"):
+            contest_folder = self.get_contest_folder(submission.contest_id, submission.contest_name)
+            folder = f"{self.base_dir}/by-contest/{contest_folder}/{problem_folder}" if organize_mode == "ALL" else f"{self.base_dir}/{contest_folder}/{problem_folder}"
+            results.append((f"{folder}/{solution_filename}", f"{folder}/metadata.json"))
+
+        # 2. By-rating layout (sorted by rating!)
+        if organize_mode in ("ALL", "RATING"):
+            rating_folder = self.get_rating_folder(submission.problem.rating)
+            folder = f"{self.base_dir}/by-rating/{rating_folder}/{problem_folder}"
+            results.append((f"{folder}/{solution_filename}", f"{folder}/metadata.json"))
+
+        # 3. By-tag layout (organized by problem topic tags!)
+        if organize_mode in ("ALL", "TAG"):
+            tags = submission.problem.tags or ["general"]
+            for tag in tags:
+                tag_folder = self.get_tag_folder(tag)
+                folder = f"{self.base_dir}/by-tag/{tag_folder}/{problem_folder}"
+                results.append((f"{folder}/{solution_filename}", f"{folder}/metadata.json"))
+
+        return results

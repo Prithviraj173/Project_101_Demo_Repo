@@ -264,40 +264,25 @@ async function syncAllAcceptedFromDayOne({ token, handle, repoName = "Codeforces
       dateUtc: new Date(s.creationTimeSeconds * 1000).toISOString()
     }, null, 2);
 
-    // Create blobs
-    const srcBlobRes = await fetch(`${GITHUB_API_URL}/repos/${owner}/${repoName}/git/blobs`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({ content: sourceCode, encoding: "utf-8" })
-    });
-    const srcBlob = await srcBlobRes.json();
-
-    const metaBlobRes = await fetch(`${GITHUB_API_URL}/repos/${owner}/${repoName}/git/blobs`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({ content: metaJson, encoding: "utf-8" })
-    });
-    const metaBlob = await metaBlobRes.json();
-
-    // Add layout destinations
+    // Add layout destinations with inline content
     if (organizeMode === "ALL" || organizeMode === "CONTEST") {
       const p = `${baseDir}/by-contest/${s.contestId}-${contestName}/${probFolder}`;
-      treeEntries.push({ path: `${p}/${solFilename}`, mode: "100644", type: "blob", sha: srcBlob.sha });
-      treeEntries.push({ path: `${p}/metadata.json`, mode: "100644", type: "blob", sha: metaBlob.sha });
+      treeEntries.push({ path: `${p}/${solFilename}`, mode: "100644", type: "blob", content: sourceCode });
+      treeEntries.push({ path: `${p}/metadata.json`, mode: "100644", type: "blob", content: metaJson });
     }
 
     if (organizeMode === "ALL" || organizeMode === "RATING") {
       const p = `${baseDir}/by-rating/${ratingKey}/${probFolder}`;
-      treeEntries.push({ path: `${p}/${solFilename}`, mode: "100644", type: "blob", sha: srcBlob.sha });
-      treeEntries.push({ path: `${p}/metadata.json`, mode: "100644", type: "blob", sha: metaBlob.sha });
+      treeEntries.push({ path: `${p}/${solFilename}`, mode: "100644", type: "blob", content: sourceCode });
+      treeEntries.push({ path: `${p}/metadata.json`, mode: "100644", type: "blob", content: metaJson });
     }
 
     if (organizeMode === "ALL" || organizeMode === "TAG") {
       for (const tag of tags) {
         const tagFolder = sanitizeSegment(tag, "general");
         const p = `${baseDir}/by-tag/${tagFolder}/${probFolder}`;
-        treeEntries.push({ path: `${p}/${solFilename}`, mode: "100644", type: "blob", sha: srcBlob.sha });
-        treeEntries.push({ path: `${p}/metadata.json`, mode: "100644", type: "blob", sha: metaBlob.sha });
+        treeEntries.push({ path: `${p}/${solFilename}`, mode: "100644", type: "blob", content: sourceCode });
+        treeEntries.push({ path: `${p}/metadata.json`, mode: "100644", type: "blob", content: metaJson });
       }
     }
   }
@@ -307,21 +292,16 @@ async function syncAllAcceptedFromDayOne({ token, handle, repoName = "Codeforces
   readme += `> Auto-generated archive of **${processedProblems.size}** unique Accepted Codeforces problems solved from **Day 1**.\n\n`;
   readme += `## 📊 Solutions by Rating\n| Rating | Solved Count | Folder Link |\n| :---: | :---: | :--- |\n`;
   for (const rKey of Object.keys(ratingMap).sort()) {
-    readme += `| **${rKey}** | ${ratingMap[rKey]} | [\`${rKey}\`](./by-rating/${rKey}/) |\n`;
+    const dName = rKey !== "unrated" && !isNaN(parseInt(rKey)) ? `⭐ ${parseInt(rKey)}` : "Unrated";
+    readme += `| **${dName}** | ${ratingMap[rKey]} | [\`${rKey}\`](./${baseDir}/by-rating/${rKey}/) |\n`;
   }
   readme += `\n## 🏷️ Solutions by Topic / Tag\n| Tag | Solved Count | Folder Link |\n| :--- | :---: | :--- |\n`;
   for (const tKey of Object.keys(tagMap).sort((a, b) => tagMap[b] - tagMap[a])) {
     const tClean = tKey.replace(/\s+/g, '-');
-    readme += `| \`${tKey}\` | ${tagMap[tKey]} | [\`${tKey}\`](./by-tag/${tClean}/) |\n`;
+    readme += `| \`${tKey}\` | ${tagMap[tKey]} | [\`${tKey}\`](./${baseDir}/by-tag/${tClean}/) |\n`;
   }
 
-  const readmeBlobRes = await fetch(`${GITHUB_API_URL}/repos/${owner}/${repoName}/git/blobs`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({ content: readme, encoding: "utf-8" })
-  });
-  const readmeBlob = await readmeBlobRes.json();
-  treeEntries.push({ path: `${baseDir}/README.md`, mode: "100644", type: "blob", sha: readmeBlob.sha });
+  treeEntries.push({ path: `README.md`, mode: "100644", type: "blob", content: readme });
 
   // Create tree
   const treeRes = await fetch(`${GITHUB_API_URL}/repos/${owner}/${repoName}/git/trees`, {

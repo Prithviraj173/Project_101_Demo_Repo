@@ -77,12 +77,18 @@ class SyncService:
             report(err, 0, 100)
             return result
 
-        # 2. Verify GitHub access & target repository
-        report("Verifying GitHub credentials and repository permissions...", 15, 100)
+        # 2. Verify GitHub access & target repository (Auto-create repo if it doesn't exist!)
+        report("Verifying GitHub credentials and target repository...", 15, 100)
         try:
             github_client = GitHubClient(token=config.github_token)
+            # Automatically get or create the repository on GitHub
+            github_client.get_or_create_repository(
+                owner=config.repo_owner,
+                name=config.repo_name,
+                description=f"Codeforces Solutions Archive for @{config.handle} — Topic-wise and Rating-wise from Day 1"
+            )
             github_client.verify_write_access(config.repo_owner, config.repo_name)
-            report(f"GitHub access confirmed for {config.repo_owner}/{config.repo_name}", 25, 100)
+            report(f"GitHub repository confirmed: {config.repo_owner}/{config.repo_name}", 25, 100)
         except (GitHubAuthError, GitHubPermissionError, GitHubAPIError) as e:
             err = f"GitHub verification error: {str(e)}"
             result.errors.append(err)

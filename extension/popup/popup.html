@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -17,13 +17,19 @@
 
     <div class="form">
       <div class="field">
+        <label for="cfHandle">Codeforces Handle</label>
+        <input type="text" id="cfHandle" placeholder="e.g. Prithviraj173" />
+      </div>
+
+      <div class="field">
         <label for="ghToken">GitHub Personal Access Token</label>
         <input type="password" id="ghToken" placeholder="ghp_..." />
       </div>
 
       <div class="field">
-        <label for="ghRepo">Target GitHub Repository</label>
-        <input type="text" id="ghRepo" placeholder="owner/repo (e.g. Prithviraj173/CP-Solutions)" />
+        <label for="ghRepo">Dedicated GitHub Repo Name</label>
+        <input type="text" id="ghRepo" value="Codeforces-Solutions" placeholder="e.g. Codeforces-Solutions" />
+        <small style="color:#64748b; font-size:10px;">Will be automatically created on your GitHub if it doesn't exist!</small>
       </div>
 
       <div class="row">
@@ -40,14 +46,16 @@
       <div class="field">
         <label for="organizeMode">Repository Organization Layout</label>
         <select id="organizeMode">
-          <option value="ALL" selected>🌟 All Layouts (Rating + Tags + Contest + Index)</option>
+          <option value="ALL" selected>🌟 All (Rating + Topic Tags + Contest + Index)</option>
           <option value="RATING">⭐ By Rating (0800, 1200, 1600...)</option>
           <option value="TAG">🏷️ By Topic Tag (DP, Greedy, Trees...)</option>
           <option value="CONTEST">🏆 By Contest ID & Name</option>
         </select>
       </div>
 
-      <button id="saveBtn" class="btn btn-primary">Save Settings</button>
+      <button id="syncAllBtn" class="btn btn-sync">🚀 1-Click Sync All (Day 1 Accepted Only)</button>
+      <button id="saveBtn" class="btn btn-primary">Save Settings for In-Page Sync</button>
+      
       <div id="statusAlert" class="status-alert hidden"></div>
     </div>
   </div>

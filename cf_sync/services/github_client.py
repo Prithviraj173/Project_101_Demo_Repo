@@ -1,4 +1,4 @@
-﻿"""
+"""
 GitHub API client providing repository inspection, permission verification,
 idempotency state tracking, and atomic multi-file Git Tree commit pushes.
 """
@@ -121,12 +121,44 @@ class GitHubClient:
         )
         if not isinstance(repos_data, list):
             return []
-        return [GitHubRepo.from_dict(r) for r in repos_data]
-
     def get_repository(self, owner: str, repo: str) -> GitHubRepo:
         """Fetches details for a specific repository."""
         data = self._request(f"repos/{owner}/{repo}")
         return GitHubRepo.from_dict(data)
+
+    def create_repository(
+        self,
+        name: str = "Codeforces-Solutions",
+        description: str = "Automated Codeforces Solutions Archive — Topic-wise & Rating-wise from Day 1",
+        is_private: bool = False,
+        auto_init: bool = True
+    ) -> GitHubRepo:
+        """Creates a new repository on the authenticated user's GitHub account."""
+        data = self._request(
+            "user/repos",
+            method="POST",
+            data={
+                "name": name,
+                "description": description,
+                "private": is_private,
+                "auto_init": auto_init,
+            }
+        )
+        return GitHubRepo.from_dict(data)
+
+    def get_or_create_repository(
+        self,
+        owner: str,
+        name: str = "Codeforces-Solutions",
+        description: str = "Automated Codeforces Solutions Archive — Topic-wise & Rating-wise from Day 1",
+        is_private: bool = False
+    ) -> GitHubRepo:
+        """Retrieves an existing repo or automatically creates a new dedicated repository."""
+        try:
+            return self.get_repository(owner, name)
+        except GitHubNotFoundError:
+            logger.info(f"Repository {owner}/{name} does not exist. Auto-creating repository on GitHub...")
+            return self.create_repository(name=name, description=description, is_private=is_private, auto_init=True)
 
     def verify_write_access(self, owner: str, repo: str) -> bool:
         """Verifies that the user has push/write permissions on the target repository."""

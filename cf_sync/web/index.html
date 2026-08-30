@@ -1,0 +1,293 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Codeforces → GitHub Sync</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="header-left">
+        <div class="logo-icon">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="16 18 22 12 16 6"></polyline>
+            <polyline points="8 6 2 12 8 18"></polyline>
+          </svg>
+        </div>
+        <div>
+          <h1>Codeforces → GitHub Sync</h1>
+          <p class="subtitle">Automated, idempotent Codeforces submissions synchronization engine</p>
+        </div>
+      </div>
+      <div class="header-right">
+        <span class="badge version-badge">v1.0.0</span>
+        <button id="themeToggleBtn" class="btn-icon" title="Toggle Theme">🌓</button>
+      </div>
+    </header>
+
+    <div class="dashboard-grid">
+      <!-- Left Column: Configuration -->
+      <div class="config-column">
+        <!-- 1. Codeforces Account Card -->
+        <section class="card">
+          <div class="card-header">
+            <span class="step-num">1</span>
+            <h2>Codeforces Account</h2>
+          </div>
+          <div class="card-body">
+            <div class="form-group">
+              <label for="cfHandle">Codeforces Handle</label>
+              <div class="input-with-button">
+                <input type="text" id="cfHandle" placeholder="e.g. tourist, Prithviraj173" />
+                <button id="cfVerifyBtn" class="btn btn-secondary">Verify</button>
+              </div>
+            </div>
+
+            <!-- Profile Info Banner -->
+            <div id="cfProfileBanner" class="profile-banner hidden">
+              <img id="cfAvatar" src="" alt="Avatar" class="avatar" />
+              <div class="profile-details">
+                <h3 id="cfProfileHandle"></h3>
+                <div class="profile-tags">
+                  <span id="cfRankBadge" class="badge"></span>
+                  <span id="cfRatingBadge" class="badge badge-rating"></span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Flow Mode Switcher -->
+            <div class="flow-selector">
+              <label class="flow-option">
+                <input type="radio" name="flowMode" value="own" checked />
+                <div class="flow-box">
+                  <span class="flow-title">Flow A: My Account</span>
+                  <span class="flow-desc">Syncs solutions + full source code</span>
+                </div>
+              </label>
+              <label class="flow-option">
+                <input type="radio" name="flowMode" value="public" />
+                <div class="flow-box">
+                  <span class="flow-title">Flow B: Public Handle</span>
+                  <span class="flow-desc">Syncs metadata only (no source scraping)</span>
+                </div>
+              </label>
+            </div>
+
+            <div id="flowNotice" class="alert alert-info">
+              <strong>Flow A Active:</strong> Submissions and source code will be synchronized where Codeforces API permits.
+            </div>
+          </div>
+        </section>
+
+        <!-- 2. GitHub Connection Card -->
+        <section class="card">
+          <div class="card-header">
+            <span class="step-num">2</span>
+            <h2>GitHub Destination</h2>
+          </div>
+          <div class="card-body">
+            <div class="form-group">
+              <label for="ghToken">GitHub Personal Access Token (PAT)</label>
+              <div class="input-with-button">
+                <input type="password" id="ghToken" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx" />
+                <button id="ghConnectBtn" class="btn btn-secondary">Connect</button>
+              </div>
+              <small class="helper-text">Requires <code>repo</code> or repository contents write permission.</small>
+            </div>
+
+            <!-- Authenticated User Banner -->
+            <div id="ghUserBanner" class="profile-banner hidden">
+              <img id="ghAvatar" src="" alt="Avatar" class="avatar" />
+              <div class="profile-details">
+                <h3 id="ghUsername"></h3>
+                <span class="badge badge-success">Authenticated</span>
+              </div>
+            </div>
+
+            <div class="grid-2">
+              <div class="form-group">
+                <label for="ghRepoSelect">Repository</label>
+                <select id="ghRepoSelect" disabled>
+                  <option value="">Connect token to load repositories...</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="ghBranchSelect">Branch</label>
+                <select id="ghBranchSelect" disabled>
+                  <option value="main">main</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="ghDestDir">Target Directory in Repo</label>
+              <input type="text" id="ghDestDir" value="codeforces" />
+              <small class="helper-text">Example structure: <code>codeforces/2048-Round/A-Robots/solution.cpp</code></small>
+            </div>
+          </div>
+        </section>
+
+        <!-- 3. Submission Filters Card -->
+        <section class="card">
+          <div class="card-header">
+            <span class="step-num">3</span>
+            <h2>Submission Filters</h2>
+          </div>
+          <div class="card-body">
+            <div class="grid-2">
+              <div class="form-group">
+                <label for="filterVerdict">Verdict</label>
+                <select id="filterVerdict">
+                  <option value="ALL">All Submissions</option>
+                  <option value="ACCEPTED_ONLY" selected>Accepted Only (OK)</option>
+                  <option value="REJECTED_ONLY">Rejected Only</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="filterLimit">Max Submissions</label>
+                <input type="number" id="filterLimit" placeholder="e.g. 50 (leave empty for all)" min="1" />
+              </div>
+            </div>
+
+            <div class="grid-2">
+              <div class="form-group">
+                <label for="filterContest">Contest ID</label>
+                <input type="number" id="filterContest" placeholder="e.g. 2048" />
+              </div>
+              <div class="form-group">
+                <label for="filterProblemIndex">Problem Index</label>
+                <input type="text" id="filterProblemIndex" placeholder="e.g. A, B, C" />
+              </div>
+            </div>
+
+            <div class="grid-2">
+              <div class="form-group">
+                <label for="filterLanguage">Language</label>
+                <input type="text" id="filterLanguage" placeholder="e.g. C++, Python, Java" />
+              </div>
+              <div class="form-group">
+                <label for="filterTag">Problem Tag</label>
+                <input type="text" id="filterTag" placeholder="e.g. dp, math, greedy" />
+              </div>
+            </div>
+
+            <div class="form-checkbox">
+              <input type="checkbox" id="filterOnlyNew" checked />
+              <label for="filterOnlyNew">Sync only new submissions (Skip already synchronized)</label>
+            </div>
+
+            <div class="action-buttons">
+              <button id="previewBtn" class="btn btn-outline">Preview Submissions</button>
+              <button id="syncNowBtn" class="btn btn-primary btn-large">
+                <span id="syncBtnSpinner" class="spinner hidden"></span>
+                <span>Start Synchronization</span>
+              </button>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <!-- Right Column: Live Status, Progress & Results -->
+      <div class="results-column">
+        <!-- Progress Card -->
+        <section id="progressCard" class="card hidden">
+          <div class="card-header">
+            <h2>Synchronization Progress</h2>
+            <span id="syncStatusBadge" class="badge badge-running">RUNNING</span>
+          </div>
+          <div class="card-body">
+            <div class="progress-bar-container">
+              <div id="progressBar" class="progress-bar" style="width: 0%;"></div>
+            </div>
+            <div class="progress-info">
+              <span id="currentStepText">Initializing...</span>
+              <span id="progressPercentText">0%</span>
+            </div>
+
+            <div class="terminal-log">
+              <div class="terminal-header">
+                <span>EXECUTION LOG</span>
+              </div>
+              <div id="terminalBody" class="terminal-body"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Summary Metric Cards -->
+        <div id="summaryCards" class="metrics-grid hidden">
+          <div class="metric-card">
+            <span class="metric-label">Fetched</span>
+            <span id="metricFetched" class="metric-value">0</span>
+          </div>
+          <div class="metric-card">
+            <span class="metric-label">Eligible</span>
+            <span id="metricEligible" class="metric-value">0</span>
+          </div>
+          <div class="metric-card metric-success">
+            <span class="metric-label">Synced</span>
+            <span id="metricSynced" class="metric-value">0</span>
+          </div>
+          <div class="metric-card metric-warning">
+            <span class="metric-label">Metadata Only</span>
+            <span id="metricMetaOnly" class="metric-value">0</span>
+          </div>
+          <div class="metric-card metric-info">
+            <span class="metric-label">Already Synced</span>
+            <span id="metricAlready" class="metric-value">0</span>
+          </div>
+          <div class="metric-card metric-danger">
+            <span class="metric-label">Failed</span>
+            <span id="metricFailed" class="metric-value">0</span>
+          </div>
+        </div>
+
+        <div id="commitBanner" class="commit-banner hidden">
+          <span>🚀 Changes successfully committed to GitHub:</span>
+          <a id="commitLink" href="#" target="_blank" rel="noopener noreferrer">View Commit on GitHub</a>
+        </div>
+
+        <!-- Submissions Table Card -->
+        <section class="card">
+          <div class="card-header table-header">
+            <h2>Submissions</h2>
+            <div class="table-actions">
+              <input type="text" id="tableSearch" placeholder="Search problems..." class="table-search-input" />
+              <span id="tableCountBadge" class="badge">0 items</span>
+            </div>
+          </div>
+          <div class="card-body table-body-wrapper">
+            <div class="table-responsive">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Contest / Problem</th>
+                    <th>Verdict</th>
+                    <th>Language</th>
+                    <th>Source</th>
+                    <th>Status</th>
+                    <th>Path</th>
+                  </tr>
+                </thead>
+                <tbody id="submissionsTableBody">
+                  <tr>
+                    <td colspan="7" class="empty-state">No submissions loaded yet. Click <strong>Verify</strong> or <strong>Preview</strong>.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

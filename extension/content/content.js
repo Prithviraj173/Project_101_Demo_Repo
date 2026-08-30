@@ -1,39 +1,97 @@
 ﻿// Content Script for Codeforces pages
 (function() {
-  console.log("[CF-GitHub-Sync] Content script loaded on Codeforces.");
+  console.log("[CF-GitHub-Sync] Content script active on Codeforces.");
 
-  // Check if current page is a submission page
-  function isSubmissionPage() {
-    return window.location.href.includes("/submission/") || document.querySelector("#program-source-text") !== null;
+  // 1. Inject Top Bar Button on Submissions Table Page
+  function injectTableSyncBar() {
+    const tableHeader = document.querySelector(".datatable, .status-frame-datatable");
+    if (!tableHeader || document.querySelector("#cf-table-sync-bar")) return;
+
+    // Detect user handle from page title or header
+    let handle = "User";
+    const titleMatch = document.title.match(/([a-zA-Z0-9_\-]+)\s+submissions/i) || document.body.innerText.match(/([a-zA-Z0-9_\-]+)\s+submissions/i);
+    if (titleMatch) {
+      handle = titleMatch[1];
+    } else {
+      const userLink = document.querySelector("a[href*='/profile/']");
+      if (userLink) handle = userLink.innerText.trim();
+    }
+
+    const bar = document.createElement("div");
+    bar.id = "cf-table-sync-bar";
+    bar.className = "cf-sync-table-bar";
+    bar.innerHTML = `
+      <div class="cf-table-bar-inner">
+        <div class="cf-bar-title">
+          <span class="cf-logo-badge">⚡ CF Sync</span>
+          <span>Sync all accepted solutions for <strong>${handle}</strong> into your GitHub repository</span>
+        </div>
+        <button id="cf-quick-sync-all-btn" class="cf-sync-button">
+          <span>🚀 Sync All Accepted (Day 1 Onwards)</span>
+        </button>
+      </div>
+      <div id="cf-table-sync-status" class="cf-table-sync-status hidden"></div>
+    `;
+
+    tableHeader.parentNode.insertBefore(bar, tableHeader);
+
+    document.getElementById("cf-quick-sync-all-btn").addEventListener("click", async () => {
+      const btn = document.getElementById("cf-quick-sync-all-btn");
+      const statusDiv = document.getElementById("cf-table-sync-status");
+
+      btn.disabled = true;
+      btn.innerText = "⏳ Auto-Creating Repo & Syncing...";
+      statusDiv.className = "cf-table-sync-status info";
+      statusDiv.innerHTML = "Connecting to GitHub & fetching all Accepted solutions from Day 1...";
+      statusDiv.classList.remove("hidden");
+
+      const storage = await chrome.storage.local.get(["ghToken", "ghRepo", "organizeMode"]);
+      if (!storage.ghToken) {
+        statusDiv.className = "cf-table-sync-status error";
+        statusDiv.innerHTML = `⚠️ Please click the <strong>⚡ extension icon</strong> in your Chrome toolbar to enter your GitHub token first!`;
+        btn.disabled = false;
+        btn.innerText = "🚀 Sync All Accepted (Day 1 Onwards)";
+        return;
+      }
+
+      chrome.runtime.sendMessage({
+        action: "SYNC_ALL_FROM_DAY_ONE",
+        payload: {
+          token: storage.ghToken,
+          handle: handle,
+          repoName: storage.ghRepo || "Codeforces-Solutions",
+          organizeMode: storage.organizeMode || "ALL"
+        }
+      }, (res) => {
+        btn.disabled = false;
+        btn.innerText = "🚀 Sync All Accepted (Day 1 Onwards)";
+
+        if (res && res.success) {
+          statusDiv.className = "cf-table-sync-status success";
+          statusDiv.innerHTML = `✅ <strong>Done!</strong> Successfully synced ${res.count} Accepted problems into GitHub repository.<br/><a href="${res.repoUrl}" target="_blank" style="color:#059669; font-weight:bold; text-decoration:underline;">View Your Repository on GitHub ↗</a>`;
+        } else {
+          statusDiv.className = "cf-table-sync-status error";
+          statusDiv.innerHTML = `❌ Sync error: ${res ? res.error : 'Unknown error'}`;
+        }
+      });
+    });
   }
 
-  function extractSubmissionData() {
-    const codeElem = document.querySelector("#program-source-text") || document.querySelector("pre.program-source") || document.querySelector("pre");
-    if (!codeElem) return null;
+  // 2. Inject Button on Submission Details / Source Code Modal
+  function injectSubmissionModalSyncButton() {
+    const codeElem = document.querySelector("#program-source-text") || document.querySelector("pre.program-source");
+    if (!codeElem || document.querySelector("#cf-github-sync-container")) return;
 
     const sourceCode = codeElem.innerText;
 
-    // Parse problem name and index from page
+    // Parse problem info from page or modal
     let problemIndex = "A";
     let problemName = "Problem";
     let contestId = 0;
     let contestName = "";
     let verdict = "OK";
     let language = "GNU C++20";
-    let rating = null;
-    let tags = [];
 
-    // Extract table details if present
-    const tableRows = document.querySelectorAll(".datatable table tr, .status-frame-datatable tr");
-    if (tableRows && tableRows.length > 1) {
-      const cells = tableRows[1].querySelectorAll("td");
-      if (cells.length >= 4) {
-        language = cells[3]?.innerText?.trim() || language;
-        verdict = cells[4]?.innerText?.trim() || verdict;
-      }
-    }
-
-    // Extract problem title link
     const problemLink = document.querySelector("a[href*='/problem/']");
     if (problemLink) {
       const pText = problemLink.innerText.trim();
@@ -45,117 +103,91 @@
         problemName = pText;
       }
       const hrefMatch = problemLink.getAttribute("href").match(/\/contest\/(\d+)/);
-      if (hrefMatch) {
-        contestId = parseInt(hrefMatch[1]);
-      }
-    }
-
-    // Extract contest title
-    const contestHeader = document.querySelector("#sidebar a[href*='/contest/']") || document.querySelector(".rtable a");
-    if (contestHeader) {
-      contestName = contestHeader.innerText.trim();
+      if (hrefMatch) contestId = parseInt(hrefMatch[1]);
     }
 
     const subIdMatch = window.location.href.match(/\/submission\/(\d+)/);
     const submissionId = subIdMatch ? parseInt(subIdMatch[1]) : Date.now();
 
-    return {
-      submissionId,
-      contestId,
-      contestName,
-      problemIndex,
-      problemName,
-      language,
-      verdict,
-      rating,
-      tags,
-      problemUrl: problemLink ? problemLink.href : window.location.href,
-      submissionUrl: window.location.href,
-      sourceCode
-    };
-  }
-
-  function injectSyncButton() {
-    if (!isSubmissionPage()) return;
-    if (document.querySelector("#cf-github-sync-btn")) return;
-
-    const targetHeader = document.querySelector(".roundbox.sidebox") || document.querySelector("#pageContent") || document.body;
-    
     const syncContainer = document.createElement("div");
     syncContainer.id = "cf-github-sync-container";
     syncContainer.innerHTML = `
       <div class="cf-sync-widget">
         <button id="cf-github-sync-btn" class="cf-sync-button">
-          <span class="cf-sync-icon">⚡</span>
-          <span id="cf-sync-btn-text">Sync to GitHub</span>
+          <span>⚡ Sync to GitHub</span>
         </button>
         <span id="cf-sync-status" class="cf-sync-status-msg"></span>
       </div>
     `;
 
-    const codeBox = document.querySelector("#program-source-text")?.parentElement || targetHeader.firstChild;
-    if (codeBox) {
-      codeBox.parentNode.insertBefore(syncContainer, codeBox);
-    } else {
-      document.body.appendChild(syncContainer);
-    }
+    codeElem.parentNode.insertBefore(syncContainer, codeElem);
 
     document.getElementById("cf-github-sync-btn").addEventListener("click", async () => {
       const btn = document.getElementById("cf-github-sync-btn");
-      const btnText = document.getElementById("cf-sync-btn-text");
       const statusMsg = document.getElementById("cf-sync-status");
 
       btn.disabled = true;
-      btnText.innerText = "Syncing...";
-      statusMsg.innerText = "Extracting code...";
+      btn.innerText = "Syncing...";
+      statusMsg.innerText = "Pushing to GitHub...";
 
-      // Get settings from storage
       const storage = await chrome.storage.local.get(["ghToken", "ghRepo", "ghBranch", "ghDir", "organizeMode"]);
-      if (!storage.ghToken || !storage.ghRepo) {
-        statusMsg.innerHTML = `<span style="color:#ef4444;">Please configure your GitHub Token & Repo in the extension popup!</span>`;
+      if (!storage.ghToken) {
+        statusMsg.innerHTML = `<span style="color:#ef4444;">Please set GitHub Token in extension popup!</span>`;
         btn.disabled = false;
-        btnText.innerText = "Sync to GitHub";
+        btn.innerText = "⚡ Sync to GitHub";
         return;
       }
-
-      const subData = extractSubmissionData();
-      if (!subData || !subData.sourceCode) {
-        statusMsg.innerHTML = `<span style="color:#ef4444;">Could not extract source code from this page.</span>`;
-        btn.disabled = false;
-        btnText.innerText = "Sync to GitHub";
-        return;
-      }
-
-      statusMsg.innerText = "Pushing commit to GitHub...";
 
       chrome.runtime.sendMessage({
         action: "SYNC_SUBMISSION",
         payload: {
           token: storage.ghToken,
-          repo: storage.ghRepo,
+          repo: storage.ghRepo || "Codeforces-Solutions",
           branch: storage.ghBranch || "main",
           baseDir: storage.ghDir || "codeforces",
           organizeMode: storage.organizeMode || "ALL",
-          submission: subData
+          submission: {
+            submissionId,
+            contestId,
+            contestName,
+            problemIndex,
+            problemName,
+            language,
+            verdict,
+            sourceCode,
+            submissionUrl: window.location.href,
+            problemUrl: problemLink ? problemLink.href : window.location.href,
+          }
         }
-      }, (response) => {
+      }, (res) => {
         btn.disabled = false;
-        if (response && response.success) {
-          btnText.innerText = "✅ Synced!";
+        if (res && res.success) {
+          btn.innerText = "✅ Synced!";
           btn.style.background = "linear-gradient(135deg, #10b981, #059669)";
-          statusMsg.innerHTML = `<a href="${response.commitUrl}" target="_blank" style="color:#10b981; font-weight:600; text-decoration:underline;">Commit Created on GitHub (${response.commitSha.slice(0, 7)})</a>`;
+          statusMsg.innerHTML = `<a href="${res.commitUrl}" target="_blank" style="color:#10b981; font-weight:bold; text-decoration:underline;">Commit Created ↗</a>`;
         } else {
-          btnText.innerText = "Sync to GitHub";
-          statusMsg.innerHTML = `<span style="color:#ef4444;">Error: ${response ? response.error : 'Unknown error'}</span>`;
+          btn.innerText = "⚡ Sync to GitHub";
+          statusMsg.innerHTML = `<span style="color:#ef4444;">Error: ${res ? res.error : 'Failed'}</span>`;
         }
       });
     });
   }
 
-  // Inject when DOM is ready
+  function init() {
+    injectTableSyncBar();
+    injectSubmissionModalSyncButton();
+  }
+
+  // Observer for dynamic Codeforces AJAX modals
+  const observer = new MutationObserver(() => {
+    init();
+  });
+
+  observer.observe(document.body, { childList: true, subtree: true });
+
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", injectSyncButton);
+    document.addEventListener("DOMContentLoaded", init);
   } else {
-    injectSyncButton();
+    init();
   }
 })();

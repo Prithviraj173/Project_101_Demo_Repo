@@ -86,10 +86,10 @@
         if (match) csrfToken = match[1];
       }
 
-      // Fetch submissions list
+      // Fetch full submissions list from Day 1
       let acceptedList = [];
       try {
-        const cfApiRes = await fetch(`https://codeforces.com/api/user.status?handle=${encodeURIComponent(effectiveHandle)}&from=1&count=500`);
+        const cfApiRes = await fetch(`https://codeforces.com/api/user.status?handle=${encodeURIComponent(effectiveHandle)}&from=1&count=10000`);
         const cfApiData = await cfApiRes.json();
         if (cfApiData.status === "OK") {
           acceptedList = (cfApiData.result || []).filter(s => s.verdict === "OK");
@@ -98,7 +98,7 @@
         console.warn("CF API fetch error:", e);
       }
 
-      // Extract unique problem submissions
+      // Extract unique problem submissions (keep latest accepted per problem)
       const uniqueProblems = [];
       const seenProblems = new Set();
       for (const sub of acceptedList) {
@@ -109,49 +109,50 @@
         }
       }
 
-      // Fetch real source code for recent unique problems
+      const totalToFetch = uniqueProblems.length;
+      statusDiv.innerHTML = `Found <strong>${totalToFetch}</strong> unique accepted problems. Extracting full written source codes...`;
+
+      // Fetch real source code for ALL unique problems in parallel batches of 5
       const customSources = {};
-      const fetchLimit = Math.min(uniqueProblems.length, 100);
-      statusDiv.innerHTML = `Extracting real source code for ${fetchLimit} unique accepted problems...`;
+      const BATCH_SIZE = 5;
 
-      for (let i = 0; i < fetchLimit; i++) {
-        const sub = uniqueProblems[i];
-        if (i % 5 === 0 || i === fetchLimit - 1) {
-          btn.innerText = `⏳ Extracting Code (${i + 1}/${fetchLimit})...`;
-          statusDiv.innerHTML = `Extracting source code: <strong>${i + 1}/${fetchLimit}</strong> (${sub.problem?.name || 'Problem'})...`;
-        }
+      for (let i = 0; i < totalToFetch; i += BATCH_SIZE) {
+        const batch = uniqueProblems.slice(i, i + BATCH_SIZE);
+        const progressPct = Math.round(((i + batch.length) / totalToFetch) * 100);
+        btn.innerText = `⏳ Extracting Code (${i + batch.length}/${totalToFetch})...`;
+        statusDiv.innerHTML = `Extracting real source code: <strong>${i + batch.length}/${totalToFetch}</strong> (${progressPct}%) — <em>${batch[0].problem?.name || 'Problem'}</em>...`;
 
-        try {
-          const formData = new URLSearchParams();
-          formData.append("submissionId", sub.id);
-          if (csrfToken) formData.append("csrf_token", csrfToken);
+        await Promise.all(batch.map(async (sub) => {
+          try {
+            const formData = new URLSearchParams();
+            formData.append("submissionId", sub.id);
+            if (csrfToken) formData.append("csrf_token", csrfToken);
 
-          const srcRes = await fetch("/data/submitSource", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-              "X-Requested-With": "XMLHttpRequest"
-            },
-            body: formData.toString()
-          });
+            const srcRes = await fetch("/data/submitSource", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+                "X-Requested-With": "XMLHttpRequest"
+              },
+              body: formData.toString()
+            });
 
-          if (srcRes.ok) {
-            const srcData = await srcRes.json();
-            if (srcData && srcData.source) {
-              customSources[sub.id] = srcData.source;
+            if (srcRes.ok) {
+              const srcData = await srcRes.json();
+              if (srcData && srcData.source) {
+                customSources[sub.id] = srcData.source;
+              }
             }
+          } catch (err) {
+            console.warn("Failed to fetch source for submission " + sub.id, err);
           }
-        } catch (err) {
-          console.warn("Failed to fetch source for " + sub.id, err);
-        }
+        }));
 
-        // Small throttle to be gentle on CF server
-        if (i % 3 === 0) {
-          await new Promise(r => setTimeout(r, 200));
-        }
+        // Polite delay between batches
+        await new Promise(r => setTimeout(r, 120));
       }
 
-      statusDiv.innerHTML = `Committing ${Object.keys(customSources).length} real source codes & problem metadata into GitHub...`;
+      statusDiv.innerHTML = `Pushing ${totalToFetch} solved problems (${Object.keys(customSources).length} with full extracted source code) into GitHub...`;
 
       chrome.runtime.sendMessage({
         action: "SYNC_ALL_FROM_DAY_ONE",
@@ -168,7 +169,7 @@
 
         if (res && res.success) {
           statusDiv.className = "cf-table-sync-status success";
-          statusDiv.innerHTML = `✅ <strong>Success!</strong> Pushed ${res.count} Accepted problems with real source code into GitHub repository.<br/><a href="${res.repoUrl}" target="_blank" style="color:#059669; font-weight:bold; text-decoration:underline;">View Your Repository on GitHub ↗</a>`;
+          statusDiv.innerHTML = `✅ <strong>Success!</strong> All ${res.count} Accepted problems with full written solutions have been synced to GitHub!<br/><a href="${res.repoUrl}" target="_blank" style="color:#059669; font-weight:bold; text-decoration:underline;">View Your Repository on GitHub ↗</a>`;
         } else {
           statusDiv.className = "cf-table-sync-status error";
           statusDiv.innerHTML = `❌ Sync error: ${res ? res.error : 'Unknown error'}`;

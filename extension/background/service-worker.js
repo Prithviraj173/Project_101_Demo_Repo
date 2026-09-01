@@ -189,7 +189,7 @@ async function getOrCreateRepo(token, rawRepoName = "Codeforces-Solutions") {
 }
 
 // Full Sync from Day 1 (Accepted Solutions Only)
-async function syncAllAcceptedFromDayOne({ token, handle, repoName = "Codeforces-Solutions", organizeMode = "ALL" }) {
+async function syncAllAcceptedFromDayOne({ token, handle, repoName = "Codeforces-Solutions", organizeMode = "ALL", customSources = {} }) {
   const { owner, fullName } = await getOrCreateRepo(token, repoName);
   const branch = "main";
   const baseDir = "codeforces";
@@ -258,13 +258,17 @@ async function syncAllAcceptedFromDayOne({ token, handle, repoName = "Codeforces
     }
 
     const header = `// Problem: ${prob.index}. ${prob.name}\n// Contest: ${s.contestId}\n// Rating: ${prob.rating || 'Unrated'}\n// Tags: ${(prob.tags || []).join(', ')}\n// Verdict: OK (Accepted)\n// Date: ${new Date(s.creationTimeSeconds * 1000).toUTCString()}\n\n`;
-    const sourceCode = header + `// Accepted Solution for Problem ${prob.index}. ${prob.name}\n// View details: https://codeforces.com/contest/${s.contestId}/submission/${s.id}\n`;
+    const actualCode = s.sourceCode || (customSources && customSources[s.id]) || "";
+    const sourceCode = actualCode 
+      ? `${header}${actualCode.trim()}\n`
+      : `${header}// Accepted Solution for Problem ${prob.index}. ${prob.name}\n// View details: https://codeforces.com/contest/${s.contestId}/submission/${s.id}\n`;
     const metaJson = JSON.stringify({
       id: s.id,
       contestId: s.contestId,
       problem: prob,
       verdict: "OK",
       language: lang,
+      sourceCodeAvailable: Boolean(actualCode),
       dateUtc: new Date(s.creationTimeSeconds * 1000).toISOString()
     }, null, 2);
 

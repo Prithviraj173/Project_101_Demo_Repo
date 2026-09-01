@@ -48,9 +48,9 @@
         const statusDiv = document.getElementById("cf-table-sync-status");
 
         btn.disabled = true;
-        btn.innerText = "⏳ Syncing into GitHub...";
+        btn.innerText = "⏳ Extracting Source Codes...";
         statusDiv.className = "cf-table-sync-status info";
-        statusDiv.innerHTML = "Fetching all Accepted solutions from Day 1 and committing...";
+        statusDiv.innerHTML = "Fetching Accepted submissions list from Codeforces...";
         statusDiv.classList.remove("hidden");
 
         const curStorage = await chrome.storage.local.get(["cfHandle", "ghToken", "ghRepo", "organizeMode"]);
@@ -65,13 +65,92 @@
         const effectiveHandle = curStorage.cfHandle || handle;
         const targetRepo = curStorage.ghRepo || "CF-Submissions-all-time";
 
+        // Find CSRF token from page
+        let csrfToken = "";
+        const csrfInput = document.querySelector("input[name='csrf_token']") || document.querySelector("meta[name='X-Csrf-Token']");
+        if (csrfInput) {
+          csrfToken = csrfInput.value || csrfInput.content || "";
+        }
+        if (!csrfToken) {
+          const match = document.documentElement.innerHTML.match(/csrf_token\s*[:=]\s*["']([a-f0-9]+)["']/i);
+          if (match) csrfToken = match[1];
+        }
+
+        // Fetch submissions list
+        let acceptedList = [];
+        try {
+          const cfApiRes = await fetch(`https://codeforces.com/api/user.status?handle=${encodeURIComponent(effectiveHandle)}&from=1&count=500`);
+          const cfApiData = await cfApiRes.json();
+          if (cfApiData.status === "OK") {
+            acceptedList = (cfApiData.result || []).filter(s => s.verdict === "OK");
+          }
+        } catch (e) {
+          console.warn("CF API fetch error:", e);
+        }
+
+        // Extract unique problem submissions
+        const uniqueProblems = [];
+        const seenProblems = new Set();
+        for (const sub of acceptedList) {
+          const pKey = `${sub.contestId || 'set'}_${sub.problem?.index || 'A'}`;
+          if (!seenProblems.has(pKey)) {
+            seenProblems.add(pKey);
+            uniqueProblems.push(sub);
+          }
+        }
+
+        // Fetch real source code for recent unique problems
+        const customSources = {};
+        const fetchLimit = Math.min(uniqueProblems.length, 100);
+        statusDiv.innerHTML = `Extracting real source code for ${fetchLimit} unique accepted problems...`;
+
+        for (let i = 0; i < fetchLimit; i++) {
+          const sub = uniqueProblems[i];
+          if (i % 5 === 0 || i === fetchLimit - 1) {
+            btn.innerText = `⏳ Extracting Code (${i + 1}/${fetchLimit})...`;
+            statusDiv.innerHTML = `Extracting source code: <strong>${i + 1}/${fetchLimit}</strong> (${sub.problem?.name || 'Problem'})...`;
+          }
+
+          try {
+            const formData = new URLSearchParams();
+            formData.append("submissionId", sub.id);
+            if (csrfToken) formData.append("csrf_token", csrfToken);
+
+            const srcRes = await fetch("/data/submitSource", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+                "X-Requested-With": "XMLHttpRequest"
+              },
+              body: formData.toString()
+            });
+
+            if (srcRes.ok) {
+              const srcData = await srcRes.json();
+              if (srcData && srcData.source) {
+                customSources[sub.id] = srcData.source;
+              }
+            }
+          } catch (err) {
+            console.warn("Failed to fetch source for " + sub.id, err);
+          }
+
+          // Small throttle to be gentle on CF server
+          if (i % 3 === 0) {
+            await new Promise(r => setTimeout(r, 200));
+          }
+        }
+
+        statusDiv.innerHTML = `Committing ${Object.keys(customSources).length} real source codes & problem metadata into GitHub...`;
+
         chrome.runtime.sendMessage({
           action: "SYNC_ALL_FROM_DAY_ONE",
           payload: {
             token: curStorage.ghToken,
             handle: effectiveHandle,
             repoName: targetRepo,
-            organizeMode: curStorage.organizeMode || "ALL"
+            organizeMode: curStorage.organizeMode || "ALL",
+            customSources: customSources
           }
         }, (res) => {
           btn.disabled = false;
@@ -79,7 +158,7 @@
 
           if (res && res.success) {
             statusDiv.className = "cf-table-sync-status success";
-            statusDiv.innerHTML = `✅ <strong>Success!</strong> Pushed ${res.count} Accepted problems into GitHub repository.<br/><a href="${res.repoUrl}" target="_blank" style="color:#059669; font-weight:bold; text-decoration:underline;">View Your Repository on GitHub ↗</a>`;
+            statusDiv.innerHTML = `✅ <strong>Success!</strong> Pushed ${res.count} Accepted problems with real source code into GitHub repository.<br/><a href="${res.repoUrl}" target="_blank" style="color:#059669; font-weight:bold; text-decoration:underline;">View Your Repository on GitHub ↗</a>`;
           } else {
             statusDiv.className = "cf-table-sync-status error";
             statusDiv.innerHTML = `❌ Sync error: ${res ? res.error : 'Unknown error'}`;

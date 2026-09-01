@@ -5,7 +5,14 @@ const GITHUB_API_URL = "https://api.github.com";
 // Language to extension mapping
 const EXT_MAP = {
   "c++": "cpp",
+  "g++": "cpp",
+  "clang++": "cpp",
   "gnu c++": "cpp",
+  "c11": "c",
+  "c99": "c",
+  "gnu c": "c",
+  "clang": "c",
+  " c ": "c",
   "python": "py",
   "pypy": "py",
   "java": "java",
@@ -14,12 +21,22 @@ const EXT_MAP = {
   "go": "go",
   "c#": "cs",
   "javascript": "js",
+  "node": "js",
   "typescript": "ts"
 };
 
 function getExtension(lang) {
   if (!lang) return "txt";
-  const l = lang.toLowerCase();
+  const l = ` ${lang.toLowerCase()} `;
+  if (l.includes("c++") || l.includes("g++") || l.includes("clang++")) return "cpp";
+  if (l.includes("gnu c") || l.includes("c11") || l.includes("c99") || l.includes(" c ") || l.includes("clang")) return "c";
+  if (l.includes("python") || l.includes("pypy")) return "py";
+  if (l.includes("java")) return "java";
+  if (l.includes("kotlin")) return "kt";
+  if (l.includes("rust")) return "rs";
+  if (l.includes("go")) return "go";
+  if (l.includes("javascript") || l.includes("node")) return "js";
+  if (l.includes("typescript")) return "ts";
   for (const [k, v] of Object.entries(EXT_MAP)) {
     if (l.includes(k)) return v;
   }
